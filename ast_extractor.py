@@ -1,4 +1,19 @@
+# ?? Pillar 3B: Safe Parsing ??????????????????????????????????????????????????
+try:
+    from agent_security.input_limits import safe_parse, InputRejected
+except ImportError:
+    safe_parse = ast.parse
+    InputRejected = Exception
+# ?????????????????????????????????????????????????????????????????????????????
 import ast
+
+# ── Pillar 3C: Nesting Guard ────────────────────────────────────────────────────
+try:
+    from agent_security.nesting_guard import check_nesting_depth, NestingTooDeep
+    _NESTING_GUARD_AVAILABLE = True
+except ImportError:
+    _NESTING_GUARD_AVAILABLE = False
+# ─────────────────────────────────────────────────────────────────────────────
 
 class CodeFeatureExtractor(ast.NodeVisitor):
     def __init__(self):
@@ -48,7 +63,19 @@ def extract_ast_context(source_code: str) -> str:
     """
 
     try:
-        tree = ast.parse(source_code)
+        # ── Pillar 3C: reject depth-bomb inputs before calling ast.parse() ───
+        if _NESTING_GUARD_AVAILABLE:
+            is_safe, depth = check_nesting_depth(source_code)
+            if not is_safe:
+                return (
+                    f"AST parsing rejected: nesting depth {depth} exceeds safety "
+                    f"limit (Pillar 3 Nesting Guard). Code not parsed."
+                )
+        # ─────────────────────────────────────────────────────────────────────
+        try:
+            tree = safe_parse(source_code)
+        except InputRejected as exc:
+            return f"AST parsing rejected: nesting depth exceeds safety limit (Pillar 3 Nesting Guard). Code not parsed. [{exc.reason}]"
 
         # -------- FEATURE EXTRACTION --------
         extractor = CodeFeatureExtractor()
